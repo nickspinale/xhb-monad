@@ -1,0 +1,15 @@
+Name:                xhb-monad
+Version:             0.1
+license:             MIT
+license-file:        LICENSE
+author:              Nick Spinale
+maintainer:          spinalen@carleton.edu
+build-type:          Simple
+extra-source-files:  README.md
+cabal-version:       >=1.10
+
+
+library
+
+  build-depends:     base, xhb, xhb-requests, mtl, transformers
+  exposed-modules:   Graphics.XHB.Monad
