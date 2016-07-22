@@ -1,1 +1,1 @@
-((import <dotfig/nix>).pkgs.haskellPackages.callPackage (import ./default.nix) {}).env
+((import <nixpkgs>).pkgs.haskellPackages.callPackage (import ./default.nix) {}).env
