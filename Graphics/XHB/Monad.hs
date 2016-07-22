@@ -10,7 +10,7 @@ module Graphics.XHB.Monad
     ( X
     , unX
 
-    -- , asksX
+    , asksX
 
     , req
     , reqAsync
@@ -124,3 +124,10 @@ f <$>> a = runIOU . fmap f . IOU $ reqAsync a
 
 (<*>>) :: (RequestWithReply a b, MonadIO m) => X m (X m (b -> c)) -> a -> X m (X m c)
 f <*>> a = runIOU $ IOU f <*> (IOU (reqAsync a))
+
+
+-- MISC --
+
+
+asksX :: Monad m => (Connection -> a) -> X m a
+asksX = X . asks
