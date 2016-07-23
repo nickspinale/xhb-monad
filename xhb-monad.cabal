@@ -16,5 +16,4 @@ library
                    , xhb-requests
                    , mtl
                    , transformers
-                   , constraints
   exposed-modules:   Graphics.XHB.Monad

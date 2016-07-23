@@ -9,20 +9,17 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module Graphics.XHB.Monad
-    ( XContext
+    ( XContext(..)
 
     , X(..)
     , unX
     , toX
 
     , MonadX(..)
-
     , asksX
-
     , notify
     , reqAsync
     , req
-
     , (<$-)
     , (<*-)
     , doX
@@ -34,14 +31,25 @@ module Graphics.XHB.Monad
 import Graphics.XHB
 import Graphics.XHB.Requests
 
-import Data.Constraint
 import Data.Typeable
+
+import Control.Monad
+import Control.Monad.IO.Class
+import Control.Monad.Trans.Class
+
+import Control.Monad.Trans.Identity as Identity (IdentityT, liftCatch)
+import Control.Monad.Trans.List as List (ListT, liftCatch)
+import Control.Monad.Trans.Maybe as Maybe (MaybeT, liftCatch)
+import Control.Monad.Trans.Reader as Reader (ReaderT, liftCatch)
+import Control.Monad.Trans.State.Lazy as LazyState (StateT, liftCatch)
+import Control.Monad.Trans.State.Strict as StrictState (StateT, liftCatch)
+import Control.Monad.Trans.Writer.Lazy as LazyWriter (WriterT, liftCatch)
+import Control.Monad.Trans.Writer.Strict as StrictWriter (WriterT, liftCatch)
+
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.Writer
 import Control.Monad.State
-import Control.Monad.IO.Class
-import Control.Monad.Trans.Class
 
 
 -- XContext --
@@ -62,25 +70,9 @@ instance XContext IO where
 newtype X m a = X { runX :: ReaderT Connection (ExceptT SomeError m) a }
   deriving (Functor, Applicative, Monad, MonadIO, Typeable)
 
+
 instance MonadTrans X where
     lift = X . lift . lift
-
-instance MonadError e m => MonadError e (X m) where
-    throwError = lift . throwError
-    catchError x f = toX $ \conn -> catchError (unX x conn) (flip ($) conn . unX . f) 
-
-instance MonadReader r m => MonadReader r (X m) where
-    ask = lift ask
-    local f x = toX $ \conn -> local f (unX x conn)
-
-instance MonadState s m => MonadState s (X m) where
-    get = lift get
-    put = lift . put
-
-instance MonadWriter w m => MonadWriter w (X m) where
-    tell = lift . tell
-    listen = X . listen . runX
-    pass = X . pass . runX
 
 
 toX :: (Connection -> m (Either SomeError a)) -> X m a
@@ -161,6 +153,82 @@ instance Monad m => Applicative (IOU m) where
     (IOU ma) <*> (IOU mb) = IOU $ (<*>) <$> ma <*> mb
 
 
--- Lame instances --
+-- X mtl instances --
 
--- TODO
+
+instance MonadError e m => MonadError e (X m) where
+    throwError = lift . throwError
+    catchError x f = toX $ \conn -> catchError (unX x conn) (flip ($) conn . unX . f) 
+
+instance MonadReader r m => MonadReader r (X m) where
+    ask = lift ask
+    local f x = toX $ \conn -> local f (unX x conn)
+
+instance MonadState s m => MonadState s (X m) where
+    get = lift get
+    put = lift . put
+
+instance MonadWriter w m => MonadWriter w (X m) where
+    tell = lift . tell
+    listen = X . listen . runX
+    pass = X . pass . runX
+
+
+-- MonadX mtl instances --
+
+
+instance MonadX x m => MonadX x (ExceptT e m) where
+    liftX = lift . liftX
+    askX = lift askX
+    throwErrorX = lift . throwErrorX
+    catchErrorX m f = ExceptT $ catchErrorX (runExceptT m) (runExceptT . f)
+
+--
+
+instance MonadX x m => MonadX x (IdentityT m) where
+    liftX = lift . liftX
+    askX = lift askX
+    throwErrorX = lift . throwErrorX
+    catchErrorX = Identity.liftCatch catchErrorX
+
+instance MonadX x m => MonadX x (ListT m) where
+    liftX = lift . liftX
+    askX = lift askX
+    throwErrorX = lift . throwErrorX
+    catchErrorX = List.liftCatch catchErrorX
+
+instance MonadX x m => MonadX x (MaybeT m) where
+    liftX = lift . liftX
+    askX = lift askX
+    throwErrorX = lift . throwErrorX
+    catchErrorX = Maybe.liftCatch catchErrorX
+
+instance MonadX x m => MonadX x (ReaderT r m) where
+    liftX = lift . liftX
+    askX = lift askX
+    throwErrorX = lift . throwErrorX
+    catchErrorX = Reader.liftCatch catchErrorX
+
+instance MonadX x m => MonadX x (LazyState.StateT s m) where
+    liftX = lift . liftX
+    askX = lift askX
+    throwErrorX = lift . throwErrorX
+    catchErrorX = LazyState.liftCatch catchErrorX
+
+instance MonadX x m => MonadX x (StrictState.StateT s m) where
+    liftX = lift . liftX
+    askX = lift askX
+    throwErrorX = lift . throwErrorX
+    catchErrorX = StrictState.liftCatch catchErrorX
+
+instance (Monoid w, MonadX x m) => MonadX x (LazyWriter.WriterT w m) where
+    liftX = lift . liftX
+    askX = lift askX
+    throwErrorX = lift . throwErrorX
+    catchErrorX = LazyWriter.liftCatch catchErrorX
+
+instance (Monoid w, MonadX x m) => MonadX x (StrictWriter.WriterT w m) where
+    liftX = lift . liftX
+    askX = lift askX
+    throwErrorX = lift . throwErrorX
+    catchErrorX = StrictWriter.liftCatch catchErrorX
