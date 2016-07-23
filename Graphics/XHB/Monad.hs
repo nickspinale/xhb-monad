@@ -1,24 +1,33 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Graphics.XHB.Monad
-    ( X
+    ( XContext
+
+    , X(..)
     , unX
+    , toX
+
+    , MonadX(..)
 
     , asksX
 
-    , req
-    , reqAsync
     , notify
+    , reqAsync
+    , req
+
+    , (<$-)
+    , (<*-)
+    , doX
 
     , IOU(..)
-    , (<$>>)
-    , (<*>>)
     ) where
 
 
@@ -33,6 +42,21 @@ import Control.Monad.Writer
 import Control.Monad.State
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Class
+
+
+-- XContext --
+
+
+class Monad m => XContext m where
+    request :: Request a => Connection -> a -> m ()
+    requestWithReply :: RequestWithReply a b => Connection -> a -> m (m (Either SomeError b))
+
+instance XContext IO where
+    request = requestIO
+    requestWithReply = requestWithReplyIO
+
+
+-- X --
 
 
 newtype X m a = X { runX :: ReaderT Connection (ExceptT SomeError m) a }
@@ -59,33 +83,6 @@ instance MonadWriter w m => MonadWriter w (X m) where
     pass = X . pass . runX
 
 
--- Class --
-
-
--- class Monad m => MonadX m where
---     liftX :: X n a -> m a
---     askX :: m Connection
---     catchErrorX :: m a -> (SomeError -> m a) -> m a
-
--- instance Monad m => MonadX (X m) where
---     liftX = 
---     askX = X $ ask
---     catchErrorX x f = X $ catchError (runX x) (runX . f)
-
--- -- TODO constraints
--- instance ( MonadX m
---          , MonadTrans t
---          , Monad (t m)
---          , MonadError SomeError (t (ReaderT Connection (ExceptT SomeError m)))
---          ) => MonadX (t m) where
--- -- instance forall m t n e. (MonadX m, MonadTrans t, Monad (t m), MonadError e n, MonadError e (t n)) => MonadX (t m) where
---     askX = lift askX
---     catchErrorX x f = catchError (lift $ runX x) (lift . runX . f)
-
-
--- Convenience --
-
-
 toX :: (Connection -> m (Either SomeError a)) -> X m a
 toX = X . ReaderT . fmap ExceptT
 
@@ -94,17 +91,61 @@ unX :: X m a -> Connection -> m (Either SomeError a)
 unX = fmap runExceptT . runReaderT . runX
 
 
--- Communication --
+-- MonadX --
 
 
-req :: (RequestWithReply a b, MonadIO m) => a -> X m b
-req a = X . ReaderT $ \conn -> ExceptT . liftIO . join $ requestWithReply conn a
+class (XContext x, Monad m) => MonadX x m | m -> x where
+    liftX :: x a -> m a
+    askX :: m Connection
+    catchErrorX :: m a -> (SomeError -> m a) -> m a
+    throwErrorX :: SomeError -> m a
 
-reqAsync :: (RequestWithReply a b, MonadIO m) => a -> X m (X m b)
-reqAsync a = X . ReaderT $ \conn -> liftIO . fmap (X . lift . ExceptT . liftIO) $ requestWithReply conn a
 
-notify :: (Request a, MonadIO m) => a -> X m ()
-notify a = X . ReaderT $ \conn -> liftIO (request conn a)
+instance XContext x => MonadX x (X x) where
+    liftX = X . lift . lift
+    askX = X ask
+    catchErrorX m f = X $ catchError (runX m) (runX . f)
+    throwErrorX = X . throwError
+
+
+asksX :: MonadX x m => (Connection -> a) -> m a
+asksX = flip fmap askX
+
+
+notify :: (MonadX x m, Request a) => a -> m ()
+notify a = do
+    conn <- askX
+    liftX $ request conn a
+
+
+reqAsync :: (MonadX x m, RequestWithReply a b) => a -> m (m b)
+reqAsync a = do
+    conn <- askX
+    x <- liftX $ requestWithReply conn a
+    either throwErrorX return <$> liftX x 
+
+
+req :: (MonadX x m, RequestWithReply a b) => a -> m b
+req a = do
+    conn <- askX
+    liftX (join (requestWithReply conn a)) >>= either throwErrorX return
+
+
+(<$-) :: (XContext x, RequestWithReply a b) => (b -> c) -> a -> Connection -> x (x (Either SomeError c))
+(f <$- a) conn = (fmap.fmap.fmap) f $ requestWithReply conn a
+
+
+(<*-) :: (XContext x, RequestWithReply a b) => (Connection -> x (x (Either SomeError (b -> c)))) -> a -> Connection -> x (x (Either SomeError c))
+(mmf <*- a) conn = do
+    mf <- mmf conn
+    mb <- requestWithReply conn a
+    return . runExceptT $ ExceptT mf <*> ExceptT mb
+
+
+doX :: MonadX x m => (Connection -> x (x (Either SomeError a))) -> m a
+doX x = do
+    conn <- askX
+    liftX (join (x conn)) >>= either throwErrorX return
 
 
 -- IOU --
@@ -119,15 +160,7 @@ instance Monad m => Applicative (IOU m) where
     pure = IOU . pure . pure
     (IOU ma) <*> (IOU mb) = IOU $ (<*>) <$> ma <*> mb
 
-(<$>>) :: (RequestWithReply a b, MonadIO m) => (b -> c) -> a -> X m (X m c)
-f <$>> a = runIOU . fmap f . IOU $ reqAsync a
 
-(<*>>) :: (RequestWithReply a b, MonadIO m) => X m (X m (b -> c)) -> a -> X m (X m c)
-f <*>> a = runIOU $ IOU f <*> (IOU (reqAsync a))
+-- Lame instances --
 
-
--- MISC --
-
-
-asksX :: Monad m => (Connection -> a) -> X m a
-asksX = X . asks
+-- TODO
