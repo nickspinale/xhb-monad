@@ -21,7 +21,7 @@ module Graphics.XHB.Monad
     , reqAsync
     , req
 
-    , WithReply
+    , WithReply(..)
     , withReply
     , (<$-)
     , (<*-)
