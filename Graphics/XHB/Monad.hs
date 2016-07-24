@@ -21,10 +21,8 @@ module Graphics.XHB.Monad
     , reqAsync
     , req
 
-    , IOU(..)
-    , ReplyT(..)
-    , toReplyT
-    , unReplyT
+    , WithReply
+    , withReply
     , (<$-)
     , (<*-)
     , doX
@@ -68,6 +66,37 @@ class Monad x => XContext x where
 instance XContext IO where
     request = requestIO
     requestWithReply = requestWithReplyIO
+
+
+newtype WithReply x a = WithReply { runWithReply :: Connection -> x (x (Either SomeError a)) }
+
+instance Functor x => Functor (WithReply x) where
+    fmap f = WithReply . (fmap . fmap . fmap . fmap) f . runWithReply
+
+instance Monad x => Applicative (WithReply x) where
+    pure = WithReply . pure . pure . pure . pure
+    -- f <*> a = WithReply $ (liftA2 . liftA2 . liftA2) (<*>) (runWithReply f) (runWithReply a)
+    f <*> a = WithReply $ \conn -> do
+                xf <- runWithReply f conn
+                xa <- runWithReply a conn
+                return . runExceptT $ ExceptT xf <*> ExceptT xa
+
+
+withReply :: (XContext x, RequestWithReply a b) => a -> WithReply x b
+withReply = WithReply . requestWithReply
+
+infixl 5 <$-, <*-
+
+(<$-) :: (XContext x, RequestWithReply a b) => (b -> c) -> a -> WithReply x c
+f <$- a = f <$> withReply a
+
+(<*-) :: (XContext x, RequestWithReply a b) => WithReply x (b -> c) -> a -> WithReply x c
+f <*- a = f <*> withReply a
+
+doX :: MonadX x m => WithReply x a -> m a
+doX x = do
+    conn <- askX
+    liftX (join (runWithReply x conn)) >>= either throwErrorX return
 
 
 -- X --
@@ -118,7 +147,7 @@ reqAsync :: (MonadX x m, RequestWithReply a b) => a -> m (m b)
 reqAsync a = do
     conn <- askX
     x <- liftX $ requestWithReply a conn
-    either throwErrorX return <$> liftX x 
+    either throwErrorX return <$> liftX x
 
 
 req :: (MonadX x m, RequestWithReply a b) => a -> m b
@@ -127,54 +156,12 @@ req a = do
     liftX (join (requestWithReply a conn)) >>= either throwErrorX return
 
 
--- DSL --
-
-
-newtype IOU m a = IOU { runIOU :: m (m a) }
-
-instance Functor m => Functor (IOU m) where
-    fmap f = IOU . fmap (fmap f) . runIOU
-
-instance Monad m => Applicative (IOU m) where
-    pure = IOU . pure . pure
-    (IOU ma) <*> (IOU mb) = IOU $ (<*>) <$> ma <*> mb
-
-
-newtype ReplyT x a = ReplyT { runReplyT :: ReaderT Connection (ExceptT SomeError (IOU x)) a }
-    deriving Functor
-
-instance Monad x => Applicative (ReplyT x) where
-    pure = toReplyT . (pure . pure . pure . pure)
-    f <*> a = toReplyT $ liftA2 (liftA2 (liftA2 (<*>))) (unReplyT f) (unReplyT a)
-    -- f <*> a = toReplyT $ (liftA2 (liftA2 (liftA2 (<*>))) `on` unReplyT) f a
-
-
-toReplyT :: (Connection -> x (x (Either SomeError a))) -> ReplyT x a
-toReplyT = ReplyT . ReaderT . fmap ExceptT . fmap IOU
-
-unReplyT :: ReplyT x a -> Connection -> x (x (Either SomeError a))
-unReplyT = fmap runIOU . fmap runExceptT . runReaderT . runReplyT
-
-
-(<$-) :: (XContext x, RequestWithReply a b) => (b -> c) -> a -> ReplyT x c
-f <$- a = f <$> toReplyT (requestWithReply a)
-
-(<*-) :: (XContext x, RequestWithReply a b) => ReplyT x (b -> c) -> a -> ReplyT x c
-f <*- a = f <*> toReplyT (requestWithReply a)
-
-
-doX :: MonadX x m => ReplyT x a -> m a
-doX x = do
-    conn <- askX
-    liftX (join (unReplyT x conn)) >>= either throwErrorX return
-
-
 -- X mtl instances --
 
 
 instance MonadError e m => MonadError e (X m) where
     throwError = lift . throwError
-    catchError x f = toX $ \conn -> catchError (unX x conn) (flip ($) conn . unX . f) 
+    catchError x f = toX $ \conn -> catchError (unX x conn) (flip ($) conn . unX . f)
 
 instance MonadReader r m => MonadReader r (X m) where
     ask = lift ask
