@@ -20,7 +20,8 @@ module Graphics.XHB.Monad
     , notify
     , reqAsync
     , req
-    , awaitEv
+    , pollEvent
+    , waitEvent
 
     , WithReply(..)
     , withReply
@@ -63,12 +64,14 @@ import Control.Monad.State
 class Monad x => XContext x where
     request :: Request a => a -> Connection -> x ()
     requestWithReply :: RequestWithReply a b => a -> Connection -> x (x (Either SomeError b))
-    awaitEvent :: Connection -> x SomeEvent
+    waitXEvent :: Connection -> x SomeEvent
+    pollXEvent :: Connection -> x (Maybe SomeEvent)
 
 instance XContext IO where
     request = requestIO
     requestWithReply = requestWithReplyIO
-    awaitEvent = waitForEvent
+    waitXEvent = waitForEvent
+    pollXEvent = pollForEvent
 
 
 newtype WithReply x a = WithReply { runWithReply :: Connection -> x (x (Either SomeError a)) }
@@ -159,8 +162,12 @@ req a = do
     liftX (join (requestWithReply a conn)) >>= either throwErrorX return
 
 
-awaitEv :: MonadX x m => m SomeEvent
-awaitEv = askX >>= liftX . awaitEvent
+waitEvent :: MonadX x m => m SomeEvent
+waitEvent = askX >>= liftX . waitXEvent
+
+pollEvent :: MonadX x m => m (Maybe SomeEvent)
+pollEvent = askX >>= liftX . pollXEvent
+
 
 -- X mtl instances --
 
