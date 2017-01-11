@@ -9,6 +9,8 @@ module Graphics.XHB.Monad
 class Monad x => XContext x
 request :: (XContext x, Request a) => a -> Connection -> x ()
 requestWithReply :: (XContext x, RequestWithReply a b) => a -> Connection -> x (x (Either SomeError b))
+waitXEvent :: XContext x => Connection -> x SomeEvent
+pollXEvent :: XContext x => Connection -> x (Maybe SomeEvent)
 newtype X m a
 X :: ReaderT Connection (ExceptT SomeError m) a -> X m a
 [runX] :: X m a -> ReaderT Connection (ExceptT SomeError m) a
@@ -23,6 +25,8 @@ asksX :: MonadX x m => (Connection -> a) -> m a
 notify :: (MonadX x m, Request a) => a -> m ()
 reqAsync :: (MonadX x m, RequestWithReply a b) => a -> m (m b)
 req :: (MonadX x m, RequestWithReply a b) => a -> m b
+pollEvent :: MonadX x m => m (Maybe SomeEvent)
+waitEvent :: MonadX x m => m SomeEvent
 newtype WithReply x a
 WithReply :: (Connection -> x (x (Either SomeError a))) -> WithReply x a
 [runWithReply] :: WithReply x a -> Connection -> x (x (Either SomeError a))
