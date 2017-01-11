@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+here=$(dirname $0)
+nixpkgs=$1
+result=$(nix-build $1 -A haskellPackages.xhb-monad --no-out-link)
+cp -r $result/share/doc/*-*-ghc-*/xhb-monad-*/html/* $here/doc
