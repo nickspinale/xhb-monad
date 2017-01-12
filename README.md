@@ -25,6 +25,6 @@ Its purpose is to allow for *pure* X logic.
 
 ## Documentation
 
-[This article](https://nickspinale.com/articles/xhb-monad) describes this package and some of its friends in detail.
+[This article](http://nickspinale.com/articles/xhb-monad) describes this package and some of its friends in detail.
 
 Haddock can be found [here](https://nickspinale.github.io/xhb-monad).
