@@ -1,6 +1,6 @@
 # xhb-monad
 
-This package contains some monads providing a uniform interface to X11 via [xhb](https://hackage.haskell.org/package/xhb) and [xhb-requests](https://github.com/nickspinale/xhb-requests).
+This package contains some monads providing a uniform interface to X11 via [xhb](https://hackage.haskell.org/package/xhb) and [xhb-requests](https://github.com/nspin/xhb-requests).
 At its core are the following two classes:
 
 ```
@@ -27,4 +27,4 @@ Its purpose is to allow for *pure* X logic.
 
 [This article](http://nickspinale.com/articles/xhb-monad) describes this package and some of its friends in detail.
 
-Haddock can be found [here](https://nickspinale.github.io/xhb-monad).
+Haddock can be found [here](https://nspin.github.io/xhb-monad).
