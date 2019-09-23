@@ -3,7 +3,7 @@
 This package contains some monads providing a uniform interface to X11 via [xhb](https://hackage.haskell.org/package/xhb) and [xhb-requests](https://github.com/nspin/xhb-requests).
 At its core are the following two classes:
 
-```
+```haskell
 import Graphics.XHB.Requests
 
 class Monad x => XContext x where
