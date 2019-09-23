@@ -25,6 +25,6 @@ Its purpose is to allow for *pure* X logic.
 
 ## Documentation
 
-[This article](http://nickspinale.com/articles/xhb-monad) describes this package and some of its friends in detail.
+[This article](https://nickspinale.com/articles/pure-x11-logic-in-haskell.html) describes this package and some of its friends in detail.
 
 Haddock can be found [here](https://nspin.github.io/xhb-monad).
